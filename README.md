@@ -8,3 +8,9 @@ Here is the link to the MakerWorld screen case - note - extend X axis by 1.02.
 
 https://makerworld.com/en/models/1810329-desktop-case-for-cyd-esp32-4-display?from=search#profileId-1931306
 
+Here is the link to the 4" display that I used
+
+https://a.co/d/0jhLd4rb
+
+See code for Calibration and areas to insert your BLE MAC addresses for your sensors
+
