@@ -1,0 +1,290 @@
+substitutions:
+  device_name: "esphome-web-e8dcb0"
+
+  sda_pin_bus: "16"         # I2C Bus A SDA
+  scl_pin_bus: "15"         # I2C BUS A SCL
+
+  i2s_lrclk_pin: "7"        # I2S LRCLK (Word Select)
+  i2s_bclk_pin: "5"         # I2S BCLK (Bit Clock)
+  i2s_mclk_pin: "4"         # I2S MCLK (Master Clock)
+  i2s_din_pin: "6"          # I2S Data In (Mic)
+  i2s_dout_pin: "8"         # I2S Data Out (Speaker)
+
+  spi_clk_pin: "12"         # SPI CLK Pin
+  spi_mosi_pin: "11"        # SPI MOSI PIN
+  spi_miso_pin: "13"        # SPI MISO PIN
+
+  backlight_pin: "45"       # Display backlight
+
+  speaker_enable_pin: "1"   # Speaker Enable
+
+  battery_level_pin: "9"    # Battery level
+
+  rgb_led_pin: "42"         
+
+esphome:
+  name: ${device_name}
+  friendly_name: ES3C28P
+  min_version: 2025.11.0
+  name_add_mac_suffix: false
+
+########################
+# Board setup
+########################
+esp32:
+  variant: esp32s3
+  framework:
+    type: esp-idf
+
+
+logger:
+
+# BACKLIGHT AUTO-SLEEP TIMER SCRIPT
+script:
+  - id: activity_timer
+    mode: restart
+    then:
+      - switch.turn_on: backlight
+      - delay:
+          seconds: '30'
+      - switch.turn_off: backlight
+  
+
+
+
+# Enable PSRAM 
+psram:
+  mode: octal
+  speed: 80MHz          
+
+
+########################
+# I/O && Bus definitions
+########################
+
+i2c:
+  - id: bus
+    sda: GPIO${sda_pin_bus}
+    scl: GPIO${scl_pin_bus}
+    scan: true
+    
+    
+spi:
+  clk_pin: GPIO${spi_clk_pin}
+  mosi_pin: GPIO${spi_mosi_pin}
+  miso_pin: GPIO${spi_miso_pin}
+
+switch:
+
+  - platform: gpio
+    pin: GPIO${backlight_pin}
+    id: backlight
+    restore_mode: ALWAYS_ON
+    # Run the timer script immediately when the ESP32 starts up
+    on_turn_on:
+      - script.execute: activity_timer  
+
+
+
+########################
+# Audio config
+########################
+
+
+
+########################
+# Display and touchscreen
+########################
+color:
+  - id: my_red
+    hex: 'FF0000'
+  - id: my_green
+    hex: '00FF00'
+  - id: my_blue
+    hex: '0000FF'
+  - id: my_yellow
+    hex: 'FFFF00'
+  - id: my_white
+    hex: 'FFFFFF' 
+  - id: light_gray
+    hex: 'D3D3D3'
+  - id: dark_gray
+    hex: '404040'  
+
+display:
+  - platform: mipi_spi
+    model: ST7796
+    dc_pin: GPIO46
+    cs_pin: GPIO10
+    invert_colors: true
+    dimensions:
+      width: 320
+      height: 480
+    
+    rotation: 90
+    
+    
+    lambda: |-
+      it.fill(Color::BLACK);
+
+      it.print(200, 5, id(font_title), Color(my_white), "Tank Levels");
+      it.horizontal_line(10, 35, 470, Color(dark_gray));
+
+      // ROW 1: PROPANE 1
+      it.print(10, 50, id(font_body), Color(my_white), "Left PROPANE Tank");
+      if (id(tank_1_level).has_state()) {
+        float pct1 = id(tank_1_level).state;
+        it.printf(250, 50, id(font_body), Color(my_green), "%.0f%%", pct1);
+        it.rectangle(10, 70, 460, 16, Color(light_gray));
+        int bar_w1 = (int)((pct1 < 0 ? 0 : (pct1 > 100 ? 100 : pct1)) * 4.56f);
+        Color c1 = (pct1 <= 20) ? Color(my_red) : Color(my_green);
+        if (bar_w1 > 0) it.filled_rectangle(12, 72, bar_w1, 12, c1);
+      } else {
+        it.print(210, 50, id(font_body), Color(my_yellow), "Searching...");
+        it.rectangle(10, 70, 460, 16, Color(dark_gray));
+      }
+
+      // ROW 2: PROPANE 2
+      it.print(10, 150, id(font_body), Color(my_white), "Right PROPANE Tank");
+      if (id(tank_2_level).has_state()) {
+        float pct2 = id(tank_2_level).state;
+        it.printf(250, 150, id(font_body), Color(my_green), "%.0f%%", pct2);
+        it.rectangle(10, 170, 460, 16, Color(light_gray));
+        int bar_w2 = (int)((pct2 < 0 ? 0 : (pct2 > 100 ? 100 : pct2)) * 4.56f);
+        Color c2 = (pct2 <= 20) ? Color(my_red) : Color(my_green);
+        if (bar_w2 > 0) it.filled_rectangle(12, 172, bar_w2, 12, c2);
+      } else {
+        it.print(210, 150, id(font_body), Color(my_yellow), "Searching...");
+        it.rectangle(10, 170, 460, 16, Color(dark_gray));
+      }
+
+      // ROW 3: FRESH WATER
+      it.print(10, 250, id(font_body), Color(my_blue), "FRESH WATER");
+      if (id(water_tank_level).has_state()) {
+        float pct3 = id(water_tank_level).state;
+        # --- The below value of 0.60 represents a 60 gallon fresh water tank - take your tank capacity and divide by 100
+        float gal3 = pct3 * 0.60;
+        float temp3 = id(water_tank_temp).state;
+        Color text_c3 = Color(my_blue); Color bar_c3 = Color(my_blue);
+        if (pct3 <= 15) { text_c3 = Color(my_red); bar_c3 = Color(my_red); }
+        else if (pct3 <= 30) { text_c3 = Color(my_yellow); bar_c3 = Color(my_yellow); }
+        it.printf(140, 250, id(font_body), text_c3, "%.0f%%    %.0f Gallons     %.0f°C", pct3, gal3, temp3);
+        it.rectangle(10, 270, 460, 16, Color(light_gray));
+        int bar_w3 = (int)((pct3 < 0 ? 0 : (pct3 > 100 ? 100 : pct3)) * 4.56f);
+        if (bar_w3 > 0) it.filled_rectangle(12, 272, bar_w3, 12, bar_c3);
+      } else {
+        it.print(210, 250, id(font_body), Color(my_yellow), "Searching...");
+        it.rectangle(10, 270, 460, 16, Color(dark_gray));
+      }
+
+
+    
+
+touchscreen:
+  - platform: ft63x6
+    interrupt_pin: GPIO17
+    on_touch:
+
+    # Reset sleep timer whenever the glass is physically touched
+    - script.execute: activity_timer
+    # Log out each touch event
+    - lambda: |-
+          ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+              touch.x,
+              touch.y,
+              touch.x_raw,
+              touch.y_raw
+              );
+
+              
+########################
+# RGB LED
+########################
+
+light:
+  - platform: esp32_rmt_led_strip
+    channel_colors: GRB
+    pin: GPIO${rgb_led_pin}
+    num_leds: 1
+    chipset: ws2812
+    name: "Status LED"
+    id: my_status_led
+    
+    # Optional: Add some fun effects
+    effects:
+      - addressable_rainbow:
+          name: Rainbow
+      - pulse:
+          name: Slow Pulse
+
+########################
+# GUI Demo
+########################
+
+
+font:
+   - file:
+       type: gfonts
+       family: Roboto
+       weight: 700
+     size: 20
+     id: font_title
+       
+   - file:
+       type: gfonts
+       family: Roboto
+       weight: 700
+     size: 16  
+     id: font_body
+
+esp32_ble_tracker:
+mopeka_ble:
+  
+sensor:
+  # --- PROPANE TANK 1 ---
+  - platform: mopeka_pro_check
+    # --- Find your BLE MAC address for your Left Propane Sensor Sensor and put it below 
+    mac_address: "FC:52:42:F4:30:D7"
+    tank_type: 40LB_V
+    level:
+      id: tank_1_level
+    temperature:
+      id: tank_1_temp
+    battery_level:
+      id: tank_1_batt
+      icon: "mdi:propane-tank-outline"
+    minimum_signal_quality: LOW
+
+  # --- PROPANE TANK 2 ---
+  - platform: mopeka_pro_check
+    # --- Find your BLE MAC address for your Right Propane Sensor Sensor and put it below 
+    mac_address: "FD:F2:AB:14:B6:40"
+    tank_type: 40LB_V
+    level:
+      id: tank_2_level
+    temperature:
+      id: tank_2_temp
+    battery_level:
+      id: tank_2_batt
+      icon: "mdi:propane-tank"
+    minimum_signal_quality: LOW
+
+  # --- WATER TANK 3 ---
+
+  - platform: mopeka_pro_check
+    # --- Find your BLE MAC address for your Universal Fresh Water Sensor and put it below 
+    mac_address: "F5:DD:E0:94:79:11"    
+    tank_type: CUSTOM
+    # --- When connected to a laptop, logging sends the distance values (sensor measurements) to the log screen in this IDE
+    # --- Change the below values for your specific water tank - each will be different (this is the calibraion)
+    custom_distance_empty: 46mm
+    custom_distance_full: 119mm
+    level:
+      id: water_tank_level
+      name: water_tank
+    temperature:
+      id: water_tank_temp
+    battery_level:
+      id: water_tank_batt
+      icon: "mdi:water"
+    minimum_signal_quality: LOW
