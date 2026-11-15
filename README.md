@@ -14,3 +14,6 @@ https://a.co/d/0jhLd4rb
 
 See code for Calibration and areas to insert your BLE MAC addresses for your sensors
 
+Here is a link for ESP Home - you can download the IDE and learn how to use it here
+
+https://esphome.io
